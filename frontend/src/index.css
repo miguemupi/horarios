@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root { color-scheme: light; }
+  :root.dark { color-scheme: dark; }
+  html { @apply bg-zinc-50 antialiased dark:bg-zinc-950; }
+  body { @apply min-h-[100dvh] bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-white; }
+  * { @apply border-zinc-200 dark:border-zinc-800; }
+  ::selection { @apply bg-brand-400 text-zinc-950; }
+  button, a { touch-action: manipulation; }
+}
+
+@layer components {
+  .field { @apply w-full min-h-12 rounded-xl border bg-white px-3.5 py-2.5 text-base text-zinc-950 outline-none transition duration-200 placeholder:text-zinc-400 hover:border-zinc-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-400/20 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500 dark:bg-zinc-950 dark:text-white dark:placeholder:text-zinc-500 dark:hover:border-zinc-600 dark:disabled:bg-zinc-900 dark:disabled:text-zinc-500; }
+  select.field, input[type='time'].field, input[type='date'].field { @apply appearance-auto bg-white dark:bg-zinc-950; color-scheme: light; }
+  .dark select.field, .dark input[type='time'].field, .dark input[type='date'].field { color-scheme: dark; }
+  .label { @apply mb-1.5 block text-sm font-semibold text-zinc-800 dark:text-zinc-200; }
+  .btn-primary { @apply inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-400 px-5 py-3 font-bold text-zinc-950 shadow-sm transition duration-200 hover:bg-brand-300 focus:outline-none focus:ring-4 focus:ring-brand-400/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100; }
+  .btn-secondary { @apply inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border bg-white px-4 py-2.5 font-semibold text-zinc-900 transition duration-200 hover:bg-zinc-100 focus:outline-none focus:ring-4 focus:ring-brand-400/20 active:scale-[0.98] dark:bg-zinc-950 dark:text-white dark:hover:bg-zinc-900 motion-reduce:transition-none motion-reduce:active:scale-100; }
+  .panel { @apply rounded-2xl border bg-white shadow-panel dark:bg-zinc-900 dark:shadow-none; }
+}
