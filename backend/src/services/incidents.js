@@ -1,6 +1,33 @@
 import { query, transaction } from './database.js';
 import { localDate } from '../utils/time.js';
 import { AppError } from '../utils/errors.js';
+import { closeStaleWorkDay } from './work-state.js';
+
+const CUTOFF_TIME = '22:00:00';
+
+// Cierra sola cualquier jornada abierta de un día anterior, y la de hoy en cuanto pasan las
+// 22:00, para el caso de trabajadores que nunca vuelven a abrir la app. Reutiliza la misma
+// lógica de cierre que se dispara al vuelo en work-state.js (mismas incidencias, mismas reglas).
+export async function closeStaleWorkDays(timezone) {
+  const today = localDate(timezone);
+  const nowTime = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).format(new Date());
+  const cutoffReached = nowTime >= CUTOFF_TIME;
+  return transaction(async (client) => {
+    const stale = await client.query(
+      `SELECT id, user_id, work_date::text AS work_date, active_task_start
+       FROM work_days
+       WHERE status = 'open' AND (work_date < $1::date OR ($2 AND work_date = $1::date))
+       FOR UPDATE`,
+      [today, cutoffReached],
+    );
+    for (const day of stale.rows) {
+      await closeStaleWorkDay(client, day.user_id, day);
+    }
+    return { closed: stale.rowCount };
+  });
+}
 
 export async function reconcileAttendance(timezone) {
   const today = localDate(timezone);

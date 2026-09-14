@@ -61,7 +61,7 @@ export function TeamStatusPage() {
     try {
       await api(`/api/incidents/${incident.id}`, { method: 'PATCH', body: { status: 'resolved', note: 'Revisada desde el panel de equipo.' } });
       setIncidents((current) => current.filter((item) => item.id !== incident.id));
-      setToast({ type: 'success', title: 'Incidencia revisada', message: 'La jornada no se ha alterado automáticamente.' });
+      setToast({ type: 'success', title: 'Incidencia revisada', message: 'Marcar como revisada no cambia horas por sí sola; corrige el parte desde el historial si hace falta.' });
     } catch (error) { setToast({ type: 'error', title: 'No se pudo resolver', message: error.message }); }
   }
 
@@ -81,7 +81,7 @@ export function TeamStatusPage() {
       </section>
 
       <section className="mt-8">
-        <div className="flex items-center gap-3"><Warning className="text-amber-600 dark:text-amber-400" size={25} /><div><h2 className="text-xl font-bold">Incidencias para revisar</h2><p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">La aplicación detecta anomalías, pero nunca inventa ni cierra horas automáticamente.</p></div></div>
+        <div className="flex items-center gap-3"><Warning className="text-amber-600 dark:text-amber-400" size={25} /><div><h2 className="text-xl font-bold">Incidencias para revisar</h2><p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Las jornadas olvidadas se cierran solas a las 22:00 y quedan aquí para revisión; la aplicación nunca inventa el negocio ni la descripción de una tarea abandonada.</p></div></div>
         {incidents.length === 0 ? <div className="panel mt-4 flex items-center gap-3 p-5"><CheckCircle className="text-brand-700 dark:text-brand-300" size={24} /><p className="font-semibold">No hay incidencias abiertas.</p></div> : <div className="mt-4 grid gap-4 sm:grid-cols-2">{incidents.map((incident) => <article className="panel p-5" key={incident.id}><p className="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">{incident.type.replaceAll('_', ' ')}</p><h3 className="mt-2 font-bold">{incident.employeeName}</h3><p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{incident.date}</p>{user.role === 'admin' && <button type="button" className="btn-secondary mt-4 w-full py-2 text-sm" onClick={() => resolveIncident(incident)}><CheckCircle size={18} />Marcar revisada</button>}</article>)}</div>}
       </section>
     </>

@@ -73,9 +73,9 @@ adminRouter.get('/reports/export.csv', asyncRoute(async (req, res) => {
   const filters = reportFiltersSchema.parse(req.query);
   const rows = await listRecords({ user: req.session.user, ...filters });
   const table = [
-    ['Fecha', 'Día semana', 'Empleado', 'Usuario', 'Negocio', 'Trabajo realizado', 'Hora inicio', 'Hora fin', 'Duración', 'Hora entrada día', 'Hora salida día'],
+    ['Fecha', 'Día semana', 'Empleado', 'Usuario', 'Negocio', 'Trabajo realizado', 'Hora inicio', 'Hora fin', 'Duración', 'Horas extra', 'Hora entrada día', 'Hora salida día'],
     ...rows.map((row) => [row.date, row.weekday, row.employeeName, row.employeeUsername, row.business, row.work,
-      row.startTime, row.endTime, durationCsv(row.totalHours), row.dayStart, row.dayEnd]),
+      row.startTime, row.endTime, durationCsv(row.totalHours), row.overtime ? 'Sí' : 'No', row.dayStart, row.dayEnd]),
   ];
   const filename = `partes-${filters.dateFrom || 'inicio'}-${filters.dateTo || 'hoy'}.csv`;
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');

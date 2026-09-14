@@ -5,7 +5,7 @@ import { databaseHealth, isDatabaseUnavailable, pool, runMigrations } from './se
 import { bootstrapDirectory, importSheetRecords, listBusinesses, listUsers } from './services/postgres-store.js';
 import { startSheetSyncWorker, stopSheetSyncWorker } from './services/sheet-sync-worker.js';
 import { readAllSheetRecords } from './services/sheets.js';
-import { reconcileAttendance } from './services/incidents.js';
+import { closeStaleWorkDays, reconcileAttendance } from './services/incidents.js';
 
 await initConfigStore();
 let databaseInitialized = false;
@@ -61,11 +61,14 @@ recoveryTimer = setInterval(async () => {
 }, 60_000);
 recoveryTimer.unref?.();
 
-await reconcileAttendance(getConfig().settings.timezone || env.timezone).catch((error) => console.error('No se pudo conciliar la asistencia:', error.message));
-attendanceTimer = setInterval(() => {
-  reconcileAttendance(getConfig().settings.timezone || env.timezone)
-    .catch((error) => console.error('No se pudo conciliar la asistencia:', error.message));
-}, 15 * 60_000);
+async function runAttendanceSweep() {
+  const timezone = getConfig().settings.timezone || env.timezone;
+  await closeStaleWorkDays(timezone).catch((error) => console.error('No se pudo cerrar jornadas obsoletas:', error.message));
+  await reconcileAttendance(timezone).catch((error) => console.error('No se pudo conciliar la asistencia:', error.message));
+}
+
+await runAttendanceSweep();
+attendanceTimer = setInterval(runAttendanceSweep, 15 * 60_000);
 attendanceTimer.unref?.();
 
 async function shutdown() {

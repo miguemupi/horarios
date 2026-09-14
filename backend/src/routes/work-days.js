@@ -16,7 +16,7 @@ const command = {
 };
 
 workDaysRouter.get('/current', asyncRoute(async (req, res) => {
-  res.json({ workDay: await currentWorkDay(req.session.user) });
+  res.json({ workDay: await currentWorkDay(req.session.user, getConfig().settings.timezone) });
 }));
 
 workDaysRouter.post('/start', asyncRoute(async (req, res) => {
@@ -38,6 +38,7 @@ workDaysRouter.post('/:id/tasks/finish', asyncRoute(async (req, res) => {
     material: z.string().max(1000).optional().default(''),
     startTime: time.optional(),
     endTime: time,
+    overtime: z.boolean().optional().default(false),
   }).parse(req.body);
   res.status(201).json({ workDay: await finishTask(req.session.user, z.string().uuid().parse(req.params.id), input) });
 }));

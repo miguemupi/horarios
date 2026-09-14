@@ -16,7 +16,7 @@ El repositorio contiene únicamente código y documentación. `.env`, PostgreSQL
 ## Qué hace la aplicación
 
 - Inicia y termina una jornada desde el móvil.
-- Registra tareas con negocio, descripción, hora de inicio y hora de fin.
+- Registra tareas con negocio, descripción, hora de inicio, hora de fin y si han sido en horas extra.
 - Calcula duraciones y totales con horas, minutos y segundos.
 - Conserva el borrador abierto en el navegador aunque el móvil se bloquee o la app se cierre.
 - Permite continuar una jornada del mismo día sin duplicar tareas ya guardadas.
@@ -58,6 +58,17 @@ Los comandos de jornada usan claves idempotentes para que un doble toque, reinte
 El trabajador puede indicar una hora de fin posterior a la hora actual cuando conoce de antemano la duración del trabajo. La siguiente tarea se muestra como **Tarea planificada** y su contador permanece en cero hasta alcanzar la hora de inicio; no se interpreta como una tarea de casi 24 horas.
 
 Los turnos reales que cruzan medianoche sí se calculan correctamente. Las horas nuevas se guardan como `HH:mm:ss`, mientras que el lector sigue admitiendo registros históricos `HH:mm`.
+
+### Cierre automático a las 22:00
+
+Si un trabajador olvida pulsar **Terminar Día de Trabajo**, la jornada se queda `open` indefinidamente y el contador de "Horas en tareas" acumularía tiempo real de varios días. Para evitarlo, el servidor cierra solo cualquier jornada abierta:
+
+- de un día anterior a hoy, en cuanto el servidor lo detecta (sin esperar a las 22:00, porque su corte ya pasó);
+- de hoy mismo, en cuanto el reloj local (`APP_TIMEZONE`) llega a las 22:00.
+
+El cierre fija `day_end` a las 22:00, marca la jornada como `submitted` y deja una incidencia `stale_open_day` en **Equipo → Incidencias** para que jefe o administración la revise y corrija si hace falta. Si había una tarea en curso sin terminar, su hora de inicio se descarta **sin inventar negocio ni descripción**: se registra aparte como incidencia `task_left_open` para que se añada manualmente desde el historial si procede. Un turno que empieza, por ejemplo, a las 23:00 no se ve afectado hasta el corte del día siguiente (~23 h de margen), así que los turnos reales que cruzan medianoche descritos arriba siguen funcionando con normalidad.
+
+La comprobación se ejecuta al abrir la app (`GET/POST /api/work-days/...`) y, para quien no vuelve a abrirla, también en el barrido periódico de asistencia cada 15 minutos (`closeStaleWorkDays` en `backend/src/services/incidents.js`).
 
 ### Magnitudes que muestra la interfaz
 
@@ -318,12 +329,13 @@ Pestañas predeterminadas:
 - `Resumen diario`
 - `Resumen por negocio`
 
-El backend detecta dos disposiciones compatibles:
+El backend detecta tres disposiciones compatibles:
 
 - **Compacta `A:K`:** sin Material ni identificador técnico de usuario.
-- **Extendida `A:O`:** recomendada; conserva Material, firmas y usuario estable.
+- **Extendida `A:O`:** conserva Material, firmas y usuario estable.
+- **Extendida con horas extra `A:P`:** recomendada; igual que la anterior más la columna de horas extra. Es la disposición con la que nace una Sheet nueva al pulsar "Crear o verificar pestañas". Una Sheet existente en `A:O` sigue funcionando igual: para incorporar la columna, añade manualmente la cabecera `Horas extra` en P1 y vuelve a pulsar "Crear o verificar pestañas".
 
-La disposición extendida es:
+La disposición extendida con horas extra es:
 
 | Columna | Cabecera | Contenido |
 |---|---|---|
@@ -342,6 +354,7 @@ La disposición extendida es:
 | M | Firma encargado | Texto opcional |
 | N | Firma empleado | Nombre confirmado |
 | O | Usuario empleado | Identificador usado para permisos |
+| P | Horas extra | `Sí` / `No` |
 
 Hay una muestra importable en [docs/estructura-sheet.csv](docs/estructura-sheet.csv). Los resúmenes usan fórmulas `QUERY` nativas y se recalculan si alguien modifica el detalle directamente.
 
@@ -541,7 +554,8 @@ Pruebas manuales recomendadas:
 12. Una tarea futura permanece a cero hasta su hora real de inicio.
 13. Terminar el día nunca cierra automáticamente una tarea activa.
 14. Eliminar una persona o negocio no debe borrar su histórico.
-15. Los esquemas de Sheet compacto `A:K` y extendido `A:O` deben seguir detectándose por cabecera.
+15. Los esquemas de Sheet compacto `A:K`, extendido `A:O` y extendido con horas extra `A:P` deben seguir detectándose por cabecera.
+16. La jornada se cierra sola de un día anterior, o de hoy a partir de las 22:00, pero nunca inventa negocio ni descripción de una tarea abandonada: solo fija la hora de salida y deja una incidencia para revisión humana.
 
 ## Limitaciones conocidas
 

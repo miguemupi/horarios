@@ -25,6 +25,7 @@ const entry = z.object({
   startTime: time,
   endTime: time,
   clientEntryId: z.string().uuid().optional(),
+  overtime: z.boolean().optional().default(false),
 });
 const submission = z.object({
   date,
@@ -39,6 +40,7 @@ const editable = z.object({
   startTime: time.optional(), endTime: time.optional(), dayStart: time.optional(), dayEnd: time.optional(),
   employeeSignature: z.string().trim().min(2).max(200).optional(),
   correctionReason: z.string().trim().min(5).max(1000).optional(),
+  overtime: z.boolean().optional(),
 });
 
 async function assertBusinesses(entries) {

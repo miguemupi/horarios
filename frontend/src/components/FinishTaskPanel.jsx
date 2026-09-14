@@ -33,6 +33,7 @@ export function FinishTaskPanel({ draft, businesses, planned = false, onSave, on
             <label className="block"><span className="label">Hora inicio *</span><input type="time" step="1" className="field tabular-nums" value={form.startTime} onChange={field('startTime')} required /></label>
             <label className="block"><span className="label">Hora fin *</span><input type="time" step="1" className="field tabular-nums" value={form.endTime} onChange={field('endTime')} required /></label>
           </div>
+          <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border bg-white px-4 py-3 transition hover:border-brand-400 dark:bg-zinc-950"><input type="checkbox" className="size-5 accent-brand-400" checked={Boolean(form.overtime)} onChange={(event) => setForm((current) => ({ ...current, overtime: event.target.checked }))} /><span className="text-sm">¿Han sido en horas extra?</span></label>
         </div>
 
         {error && <p className="mt-3 text-sm font-semibold text-red-700 dark:text-red-400">{error}</p>}

@@ -10,6 +10,8 @@ export const DETAIL_HEADERS = [
   'Hora inicio', 'Hora fin', 'Total horas', 'Hora entrada día', 'Hora salida día',
   'Timestamp de registro', 'Firma encargado', 'Firma empleado', 'Usuario empleado',
 ];
+const OVERTIME_HEADER = 'Horas extra';
+export const DETAIL_HEADERS_OVERTIME = [...DETAIL_HEADERS, OVERTIME_HEADER];
 
 const LEGACY_EMPLOYEE_HEADER = 'Email empleado';
 const COMPACT_HEADERS = [
@@ -20,12 +22,20 @@ const COMPACT_HEADERS = [
 const EXTENDED_LAYOUT = {
   type: 'extended', headers: DETAIL_HEADERS, endColumn: 'O',
   material: 5, startTime: 6, endTime: 7, totalHours: 8, dayStart: 9, dayEnd: 10,
-  recordId: 11, managerSignature: 12, employeeSignature: 13, employeeUsername: 14,
+  recordId: 11, managerSignature: 12, employeeSignature: 13, employeeUsername: 14, overtime: null,
+};
+// Igual que EXTENDED_LAYOUT pero con una columna P adicional para "¿Han sido en horas extra?".
+// Es un layout aparte (y no una modificación de EXTENDED_LAYOUT) para no romper hojas ya en
+// producción con la cabecera A:O documentada: siguen detectándose y funcionando igual que antes.
+const EXTENDED_OVERTIME_LAYOUT = {
+  type: 'extended-overtime', headers: DETAIL_HEADERS_OVERTIME, endColumn: 'P',
+  material: 5, startTime: 6, endTime: 7, totalHours: 8, dayStart: 9, dayEnd: 10,
+  recordId: 11, managerSignature: 12, employeeSignature: 13, employeeUsername: 14, overtime: 15,
 };
 const COMPACT_LAYOUT = {
   type: 'compact', headers: COMPACT_HEADERS, endColumn: 'K',
   material: null, startTime: 5, endTime: 6, totalHours: 7, dayStart: 8, dayEnd: 9,
-  recordId: 10, managerSignature: null, employeeSignature: null, employeeUsername: null,
+  recordId: 10, managerSignature: null, employeeSignature: null, employeeUsername: null, overtime: null,
 };
 
 let api;
@@ -40,8 +50,11 @@ function matchesHeaders(actual, expected) {
 }
 
 function detectLayout(headers, allowEmpty = false) {
-  if (!headers.length && allowEmpty) return EXTENDED_LAYOUT;
+  if (!headers.length && allowEmpty) return EXTENDED_OVERTIME_LAYOUT;
   if (matchesHeaders(headers, COMPACT_HEADERS)) return COMPACT_LAYOUT;
+  if (headers.length >= DETAIL_HEADERS_OVERTIME.length
+    && DETAIL_HEADERS_OVERTIME.every((header, index) => String(headers[index] || '').trim() === header
+      || (index === 14 && String(headers[index] || '').trim() === LEGACY_EMPLOYEE_HEADER))) return EXTENDED_OVERTIME_LAYOUT;
   if (headers.length >= DETAIL_HEADERS.length
     && DETAIL_HEADERS.every((header, index) => String(headers[index] || '').trim() === header
       || (index === 14 && String(headers[index] || '').trim() === LEGACY_EMPLOYEE_HEADER))) return EXTENDED_LAYOUT;
@@ -51,7 +64,7 @@ function detectLayout(headers, allowEmpty = false) {
 async function readLayout(settings, allowEmpty = false) {
   const response = await withRetry(() => sheetsApi().spreadsheets.values.get({
     spreadsheetId: settings.spreadsheetId,
-    range: sheetRange(settings.sheets.detail, 'A1:O1'),
+    range: sheetRange(settings.sheets.detail, 'A1:P1'),
   }));
   return detectLayout(response.data.values?.[0] || [], allowEmpty);
 }
@@ -112,7 +125,7 @@ export async function initializeSpreadsheet() {
 
   const headerResponse = await withRetry(() => sheets.spreadsheets.values.get({
     spreadsheetId: settings.spreadsheetId,
-    range: sheetRange(settings.sheets.detail, 'A1:O1'),
+    range: sheetRange(settings.sheets.detail, 'A1:P1'),
   }));
   const layout = detectLayout(headerResponse.data.values?.[0] || [], true);
   const totalColumn = layout.type === 'compact' ? 'H' : 'I';
@@ -165,6 +178,7 @@ function rowToRecord(row, rowNumber, layout, usernamesByName = new Map()) {
     work: row[4] || '', material: layout.material === null ? '' : row[layout.material] || '',
     startTime: normalizeTime(row[layout.startTime]), endTime: normalizeTime(row[layout.endTime]),
     totalHours: normalizeHours(row[layout.totalHours]), dayStart: normalizeTime(row[layout.dayStart]), dayEnd: normalizeTime(row[layout.dayEnd]),
+    overtime: layout.overtime === null ? false : row[layout.overtime] === 'Sí',
     recordId: layout.type === 'compact' ? `${sourceRecordId || 'sin-id'}::row:${rowNumber}` : sourceRecordId,
     sourceRecordId,
     managerSignature: layout.managerSignature === null ? '' : row[layout.managerSignature] || '',
@@ -222,17 +236,19 @@ function recordRow(payload, work, user, timestamp, layout) {
     managerSignature: payload.managerSignature?.trim() || '',
     employeeSignature: payload.employeeSignature.trim(),
     employeeUsername: user.username || user.email,
+    overtime: work.overtime ? 'Sí' : 'No',
   };
   if (layout.type === 'compact') return [
     common.date, common.weekday, common.employeeName, common.business, common.work,
     common.startTime, common.endTime, common.totalHours, common.dayStart, common.dayEnd,
     common.timestamp,
   ];
-  return [
+  const row = [
     common.date, common.weekday, common.employeeName, common.business, common.work, common.material,
     common.startTime, common.endTime, common.totalHours, common.dayStart, common.dayEnd,
     common.timestamp, common.managerSignature, common.employeeSignature, common.employeeUsername,
   ];
+  return layout.overtime === null ? row : [...row, common.overtime];
 }
 
 function updatedRow(merged, layout, totalHours) {
@@ -242,12 +258,13 @@ function updatedRow(merged, layout, totalHours) {
     merged.work.trim(), merged.startTime, merged.endTime, totalHours, merged.dayStart, merged.dayEnd,
     timestamp,
   ];
-  return [
+  const row = [
     merged.date, weekday(merged.date, getConfig().settings.timezone), merged.employeeName, merged.business,
     merged.work.trim(), merged.material?.trim() || '', merged.startTime, merged.endTime, totalHours,
     merged.dayStart, merged.dayEnd, timestamp, merged.managerSignature || '', merged.employeeSignature,
     merged.employeeUsername,
   ];
+  return layout.overtime === null ? row : [...row, merged.overtime ? 'Sí' : 'No'];
 }
 
 export async function appendTimesheet(payload, user) {
@@ -350,6 +367,7 @@ export async function syncWorkDaySnapshot(snapshot) {
       startTime: task.start_time,
       endTime: task.end_time,
       totalHours: Number(task.duration_seconds) / 3600,
+      overtime: Boolean(task.is_overtime),
     };
     const user = { name: task.employee_name, username: task.employee_username };
     const values = recordRow(payload, work, user, sheetCellRecordId, layout);

@@ -157,7 +157,7 @@ export function HistoryPage() {
                 <h3 className="sr-only">Tareas del {dateLabel}</h3>
                 <ol className="space-y-3">{part.entries.map((row, index) => <li key={row.recordId} className="rounded-2xl border bg-white p-4 dark:bg-zinc-950 sm:p-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">TAREA {index + 1}</span><span className="rounded-md bg-zinc-100 px-2 py-1 text-xs font-semibold dark:bg-zinc-800">{row.business}</span></div><p className="mt-3 leading-relaxed">{row.work}</p></div>
+                    <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">TAREA {index + 1}</span><span className="rounded-md bg-zinc-100 px-2 py-1 text-xs font-semibold dark:bg-zinc-800">{row.business}</span>{row.overtime && <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-400/15 dark:text-amber-300">Horas extra</span>}</div><p className="mt-3 leading-relaxed">{row.work}</p></div>
                     <div className="shrink-0 sm:text-right"><p className="whitespace-nowrap text-sm font-semibold tabular-nums">{formatTime(row.startTime)} a {formatTime(row.endTime)}</p><p className="mt-1 whitespace-nowrap text-sm font-bold tabular-nums text-brand-800 dark:text-brand-300">{formatDuration(row.totalHours * 60)}</p></div>
                   </div>
                   {canEdit(row) && <div className="mt-4 flex flex-col gap-2 border-t pt-4 sm:flex-row">

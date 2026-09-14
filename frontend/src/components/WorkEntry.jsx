@@ -3,6 +3,7 @@ import { durationMinutes, formatDuration } from '../lib/time.js';
 
 export function WorkEntry({ entry, index, businesses, onChange, onRemove, canRemove }) {
   const update = (field) => (event) => onChange(index, { ...entry, [field]: event.target.value });
+  const updateOvertime = (event) => onChange(index, { ...entry, overtime: event.target.checked });
   return (
     <fieldset className="border-t pt-6 first:border-t-0 first:pt-0">
       <legend className="sr-only">Trabajo {index + 1}</legend>
@@ -12,6 +13,7 @@ export function WorkEntry({ entry, index, businesses, onChange, onRemove, canRem
         <label className="block md:col-span-2"><span className="label">Trabajos efectuados *</span><textarea className="field min-h-28 resize-y" value={entry.work} onChange={update('work')} maxLength={2000} required placeholder="Describe el trabajo realizado" /></label>
         <label className="block"><span className="label">Hora inicio *</span><input type="time" step="1" className="field tabular-nums" value={entry.startTime} onChange={update('startTime')} required /></label>
         <label className="block"><span className="label">Hora fin *</span><input type="time" step="1" className="field tabular-nums" value={entry.endTime} onChange={update('endTime')} required /><span className="mt-1.5 block text-xs text-zinc-500 dark:text-zinc-400">Si termina después de medianoche, el cálculo continúa al día siguiente.</span></label>
+        <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border bg-white px-4 py-3 transition hover:border-brand-400 dark:bg-zinc-950 md:col-span-2"><input type="checkbox" className="size-5 accent-brand-400" checked={Boolean(entry.overtime)} onChange={updateOvertime} /><span className="text-sm">¿Han sido en horas extra?</span></label>
       </div>
     </fieldset>
   );

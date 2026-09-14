@@ -1,4 +1,4 @@
-import { ArrowClockwise, ChartBar, Clock, CloudArrowUp, DownloadSimple, ListChecks, UsersThree } from '@phosphor-icons/react';
+import { ArrowClockwise, ChartBar, Clock, CloudArrowUp, DownloadSimple, ListChecks, Timer, UsersThree } from '@phosphor-icons/react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, queryString } from '../lib/api.js';
 import { currentDate, daysAgoDate, formatDuration } from '../lib/time.js';
@@ -99,11 +99,12 @@ export function AdminDashboard({ onToast }) {
       </div>
 
       {loading || !data ? <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4"><div className="h-36 animate-pulse rounded-2xl bg-zinc-100 dark:bg-zinc-800 sm:col-span-2" /><div className="h-36 animate-pulse rounded-2xl bg-zinc-100 dark:bg-zinc-800" /><div className="h-36 animate-pulse rounded-2xl bg-zinc-100 dark:bg-zinc-800" /></div> : <div className="p-5 sm:p-6">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <Metric featured label="Horas registradas" value={formatDuration(data.summary.totalSeconds / 60)} detail={`${data.summary.workDays} jornadas en el periodo`} icon={Clock} />
           <Metric label="Tareas" value={data.summary.tasks} detail="Trabajos documentados" icon={ListChecks} />
           <Metric label="Personas" value={data.summary.employees} detail="Con actividad registrada" icon={UsersThree} />
           <Metric label="Media por jornada" value={formatDuration(data.summary.averageSecondsPerDay / 60)} detail="Promedio por empleado y día" icon={ChartBar} />
+          <Metric label="Horas extra" value={formatDuration(data.summary.overtimeSeconds / 60)} detail="Marcadas como horas extra" icon={Timer} />
         </div>
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
           <DailyChart rows={data.daily} />

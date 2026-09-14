@@ -166,6 +166,7 @@ function mapRecord(row) {
     startTime: row.start_time,
     endTime: row.end_time,
     totalHours: Number(row.duration_seconds) / 3600,
+    overtime: Boolean(row.is_overtime),
     dayStart: row.day_start,
     dayEnd: row.day_end,
     workDayId: row.work_day_id,
@@ -231,16 +232,16 @@ export async function saveTimesheet(payload, sessionUser, timezone) {
         user.id, payload.date, entryIndex, entry.business, entry.work.trim(), entry.startTime, entry.endTime,
       ])).digest('hex');
       const inserted = await client.query(
-        `INSERT INTO work_tasks (work_day_id, business_id, business_name, description, material, start_time, end_time, duration_seconds, position, client_entry_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `INSERT INTO work_tasks (work_day_id, business_id, business_name, description, material, start_time, end_time, duration_seconds, position, client_entry_id, is_overtime)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          ON CONFLICT (work_day_id, client_entry_id) WHERE client_entry_id IS NOT NULL DO UPDATE SET
            business_id = EXCLUDED.business_id, business_name = EXCLUDED.business_name,
            description = EXCLUDED.description, material = EXCLUDED.material,
            start_time = EXCLUDED.start_time, end_time = EXCLUDED.end_time,
-           duration_seconds = EXCLUDED.duration_seconds, sheet_synced_at = NULL
+           duration_seconds = EXCLUDED.duration_seconds, is_overtime = EXCLUDED.is_overtime, sheet_synced_at = NULL
          RETURNING id`,
         [dayId, businessResult.rows[0].id, entry.business, entry.work.trim(), entry.material?.trim() || '', entry.startTime,
-          entry.endTime, Math.round(minutesBetween(entry.startTime, entry.endTime) * 60), position, entryId],
+          entry.endTime, Math.round(minutesBetween(entry.startTime, entry.endTime) * 60), position, entryId, Boolean(entry.overtime)],
       );
       ids.push(inserted.rows[0].id);
     }
@@ -272,9 +273,9 @@ export async function updateRecord(recordId, changes, sessionUser) {
     await client.query(
       `UPDATE work_tasks SET business_id = COALESCE($2, business_id), business_name = COALESCE($3, business_name),
        description = COALESCE($4, description), material = COALESCE($5, material), start_time = $6, end_time = $7,
-       duration_seconds = $8, sheet_synced_at = NULL WHERE id = $1`,
+       duration_seconds = $8, is_overtime = COALESCE($9, is_overtime), sheet_synced_at = NULL WHERE id = $1`,
       [recordId, changes.businessId || null, changes.business || null, changes.work || null,
-        changes.material ?? null, start, end, Math.round(minutesBetween(start, end) * 60)],
+        changes.material ?? null, start, end, Math.round(minutesBetween(start, end) * 60), changes.overtime ?? null],
     );
     if (actor.role !== 'admin' && current.manager_signature) {
       await client.query(
@@ -467,11 +468,11 @@ export async function importSheetRecords(records, timezone) {
       const createdAt = Number.isNaN(Date.parse(sourceRecordId)) ? new Date() : new Date(sourceRecordId);
       await client.query(
         `INSERT INTO work_tasks (work_day_id, business_id, business_name, description, material, start_time, end_time,
-          duration_seconds, position, client_entry_id, sheet_row_number, sheet_record_id, sheet_synced_at, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$13)`,
+          duration_seconds, position, client_entry_id, sheet_row_number, sheet_record_id, sheet_synced_at, created_at, is_overtime)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$13,$14)`,
         [dayId, business.rows[0]?.id || null, row.business || 'Sin negocio', row.work || 'Sin descripción', row.material || '',
           row.startTime, row.endTime, durationSeconds, position, `legacy:${row.rowNumber}`, row.rowNumber,
-          sourceRecordId, createdAt],
+          sourceRecordId, createdAt, Boolean(row.overtime)],
       );
       imported += 1;
     }
@@ -491,10 +492,12 @@ export async function adminStatistics(filters) {
   const { where, values } = reportFilters(filters);
   const [summary, employees, businesses, daily] = await Promise.all([
     query(`SELECT count(t.id)::int AS tasks, count(DISTINCT d.id)::int AS work_days,
-      count(DISTINCT d.user_id)::int AS employees, COALESCE(sum(t.duration_seconds), 0)::bigint AS total_seconds
+      count(DISTINCT d.user_id)::int AS employees, COALESCE(sum(t.duration_seconds), 0)::bigint AS total_seconds,
+      COALESCE(sum(t.duration_seconds) FILTER (WHERE t.is_overtime), 0)::bigint AS overtime_seconds
       FROM work_days d JOIN work_tasks t ON t.work_day_id = d.id ${where}`, values),
     query(`SELECT u.display_name AS name, u.username, count(t.id)::int AS tasks,
-      count(DISTINCT d.id)::int AS work_days, COALESCE(sum(t.duration_seconds), 0)::bigint AS total_seconds
+      count(DISTINCT d.id)::int AS work_days, COALESCE(sum(t.duration_seconds), 0)::bigint AS total_seconds,
+      COALESCE(sum(t.duration_seconds) FILTER (WHERE t.is_overtime), 0)::bigint AS overtime_seconds
       FROM work_days d JOIN work_tasks t ON t.work_day_id = d.id JOIN app_users u ON u.id = d.user_id
       ${where} GROUP BY u.id ORDER BY total_seconds DESC, u.display_name`, values),
     query(`SELECT t.business_name AS name, count(t.id)::int AS tasks,
@@ -514,9 +517,10 @@ export async function adminStatistics(filters) {
       workDays: totals.work_days,
       employees: totals.employees,
       totalSeconds,
+      overtimeSeconds: Number(totals.overtime_seconds),
       averageSecondsPerDay: totals.work_days ? Math.round(totalSeconds / totals.work_days) : 0,
     },
-    employees: employees.rows.map((row) => ({ ...row, totalSeconds: Number(row.total_seconds), total_seconds: undefined })),
+    employees: employees.rows.map((row) => ({ ...row, totalSeconds: Number(row.total_seconds), overtimeSeconds: Number(row.overtime_seconds), total_seconds: undefined, overtime_seconds: undefined })),
     businesses: businesses.rows.map((row) => ({ ...row, totalSeconds: Number(row.total_seconds), total_seconds: undefined })),
     daily: daily.rows.map((row) => ({ ...row, totalSeconds: Number(row.total_seconds), total_seconds: undefined })),
   };

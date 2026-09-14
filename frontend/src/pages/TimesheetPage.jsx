@@ -10,7 +10,7 @@ import { currentDate, currentTime, durationMinutes, elapsedMinutesSince, formatD
 import { commandIdentity, workDayStorageKey } from '../lib/device.js';
 import { loadDraftOffline, queueCommand, removeDraftOffline, saveDraftOffline } from '../lib/offline-store.js';
 
-const blankEntry = (start = currentTime()) => ({ clientEntryId: crypto.randomUUID(), business: '', work: '', material: '', startTime: start, endTime: start });
+const blankEntry = (start = currentTime()) => ({ clientEntryId: crypto.randomUUID(), business: '', work: '', material: '', startTime: start, endTime: start, overtime: false });
 
 function TasksSummary({ persisted, entries }) {
   if (persisted.length + entries.length === 0) return null;
@@ -18,8 +18,8 @@ function TasksSummary({ persisted, entries }) {
     <div className="panel p-5 sm:p-6">
       <div className="flex items-center gap-2"><ListChecks size={22} className="text-brand-700 dark:text-brand-300" /><h2 className="text-lg font-bold">Resumen de tareas</h2></div>
       <ul className="mt-4 space-y-2">
-        {persisted.map((row) => <li key={row.recordId} className="flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm"><span><strong>{row.business}</strong> · {formatTime(row.startTime)} a {formatTime(row.endTime)}</span><span className="tabular-nums text-zinc-500 dark:text-zinc-400">{formatDuration(row.totalHours * 60)}</span></li>)}
-        {entries.map((entry, index) => <li key={`draft-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-dashed px-4 py-3 text-sm"><span><strong>{entry.business}</strong> · {formatTime(entry.startTime)} a {formatTime(entry.endTime)}</span><span className="tabular-nums text-zinc-500 dark:text-zinc-400">{formatDuration(durationMinutes(entry.startTime, entry.endTime))}</span></li>)}
+        {persisted.map((row) => <li key={row.recordId} className="flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm"><span><strong>{row.business}</strong> · {formatTime(row.startTime)} a {formatTime(row.endTime)}{row.overtime && <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-400/15 dark:text-amber-300">Horas extra</span>}</span><span className="tabular-nums text-zinc-500 dark:text-zinc-400">{formatDuration(row.totalHours * 60)}</span></li>)}
+        {entries.map((entry, index) => <li key={`draft-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-dashed px-4 py-3 text-sm"><span><strong>{entry.business}</strong> · {formatTime(entry.startTime)} a {formatTime(entry.endTime)}{entry.overtime && <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-400/15 dark:text-amber-300">Horas extra</span>}</span><span className="tabular-nums text-zinc-500 dark:text-zinc-400">{formatDuration(durationMinutes(entry.startTime, entry.endTime))}</span></li>)}
       </ul>
     </div>
   );
@@ -99,6 +99,16 @@ export function TimesheetPage() {
     return () => window.clearInterval(id);
   }, [form.started, form.reviewing]);
 
+  function reloadAfterAutoClose() {
+    localStorage.removeItem(workDayStorageKey(user.email));
+    localStorage.removeItem(draftKey);
+    removeDraftOffline(draftKey).catch(() => {});
+    setPersisted([]);
+    setForm({ started: false, date: currentDate(), dayStart: currentTime(), dayEnd: currentTime(), employeeSignature: user.name, signatureConfirmed: false, entries: [], activeTask: null, reviewing: false, dayClosing: false });
+    setStatus('ready');
+    setToast({ type: 'error', title: 'La jornada se cerró sola a las 22:00', message: 'Puedes iniciar una jornada nueva. Si falta alguna tarea de la jornada cerrada, pídele a un administrador que la añada desde el historial.' });
+  }
+
   const activeMinutes = form.activeTask ? elapsedMinutesSince(form.date, form.activeTask.startTime) : 0;
   const activeTaskIsPlanned = form.activeTask ? isFutureDateTime(form.date, form.activeTask.startTime) : false;
   const dayElapsedMinutes = form.started ? elapsedMinutesSince(form.date, form.dayStart) : 0;
@@ -137,7 +147,7 @@ export function TimesheetPage() {
   function openFinishing() {
     const endTime = activeTaskIsPlanned ? form.activeTask.startTime : currentTime();
     setDayEndWarning(false);
-    setFinishing({ draft: { business: '', work: '', startTime: form.activeTask.startTime, endTime }, planned: activeTaskIsPlanned });
+    setFinishing({ draft: { business: '', work: '', startTime: form.activeTask.startTime, endTime, overtime: false }, planned: activeTaskIsPlanned });
   }
 
   async function confirmFinishing(entryDraft) {
@@ -161,6 +171,7 @@ export function TimesheetPage() {
       setFinishing(null);
       window.dispatchEvent(new Event('serendipia-presence-change'));
     } catch (error) {
+      if (error.code === 'WORK_DAY_CLOSED') { setFinishing(null); reloadAfterAutoClose(); return; }
       setFinishing((current) => ({ ...current, saving: false }));
       setToast({ type: 'error', title: 'No se pudo guardar la tarea', message: error.message });
     }
@@ -179,7 +190,10 @@ export function TimesheetPage() {
       setPersisted([]);
       setForm((current) => ({ ...current, workDayId: workDay.id, presenceId: workDay.journeyKey, entries: workDay.tasks, reviewing: false, dayClosing: false, activeTask: { startTime: workDay.activeTask?.startTime || now } }));
       window.dispatchEvent(new Event('serendipia-presence-change'));
-    } catch (error) { setToast({ type: 'error', title: 'No se pudo iniciar la tarea', message: error.message }); }
+    } catch (error) {
+      if (error.code === 'WORK_DAY_CLOSED') return reloadAfterAutoClose();
+      setToast({ type: 'error', title: 'No se pudo iniciar la tarea', message: error.message });
+    }
   }
 
   function beginDayClosing() {
@@ -256,6 +270,7 @@ export function TimesheetPage() {
         : { type: 'success', title: 'Parte guardado de forma segura', message: `${savedEntries.length} ${savedEntries.length === 1 ? 'tarea registrada' : 'tareas registradas'} en PostgreSQL. Google Sheets se actualizará en la exportación programada.` });
       window.dispatchEvent(new Event('serendipia-presence-change'));
     } catch (error) {
+      if (error.code === 'WORK_DAY_CLOSED') return reloadAfterAutoClose();
       setStatus('error');
       setToast({ type: 'error', title: 'No se ha podido guardar el parte', message: `${error.message} Tus datos siguen guardados en este dispositivo. Pulsa reintentar cuando recuperes conexión.` });
     }
