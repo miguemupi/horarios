@@ -55,6 +55,7 @@ export function HistoryPage() {
           managerSignature: row.managerSignature,
           dayStart: row.dayStart,
           dayEnd: row.dayEnd,
+          declaredHours: row.declaredHours ?? null,
           totalHours: 0,
           businesses: new Set(),
           entries: [],
@@ -148,7 +149,7 @@ export function HistoryPage() {
                   <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400"><span className="tabular-nums">Jornada: {formatTime(part.dayStart)} a {formatTime(part.dayEnd)}</span><span aria-hidden="true"> · </span>{part.businesses.join(', ')}</p>
                 </div>
                 <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-end">
-                  <div className="sm:text-right"><p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Total del día</p><p className="mt-1 whitespace-nowrap font-bold tabular-nums text-brand-800 dark:text-brand-300">{formatDuration(part.totalHours * 60)}</p></div>
+                  <div className="sm:text-right"><p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Total de tareas</p><p className="mt-1 whitespace-nowrap font-bold tabular-nums text-brand-800 dark:text-brand-300">{formatDuration(part.totalHours * 60)}</p>{part.declaredHours != null && <p className="mt-1 whitespace-nowrap text-xs text-zinc-500 dark:text-zinc-400">Declaradas: <span className="font-semibold tabular-nums">{part.declaredHours} h</span></p>}</div>
                   <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700 transition group-hover:bg-brand-100 dark:bg-zinc-800 dark:text-zinc-200 dark:group-hover:bg-brand-400/20"><CaretDown className={`transition-transform duration-200 motion-reduce:transition-none ${expanded ? 'rotate-180' : ''}`} size={21} weight="bold" /></span>
                 </div>
               </button>

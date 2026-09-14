@@ -3,11 +3,15 @@ import { useState } from 'react';
 import { durationMinutes, formatDuration, formatTime } from '../lib/time.js';
 
 export function EditRecordPanel({ record, businesses, onSave, onClose, saving }) {
-  const [form, setForm] = useState(() => ({ ...record, correctionReason: '', startTime: formatTime(record.startTime), endTime: formatTime(record.endTime), dayStart: formatTime(record.dayStart), dayEnd: formatTime(record.dayEnd) }));
+  const [form, setForm] = useState(() => ({ ...record, correctionReason: '', startTime: formatTime(record.startTime), endTime: formatTime(record.endTime), dayStart: formatTime(record.dayStart), dayEnd: formatTime(record.dayEnd), declaredHours: record.declaredHours != null ? String(record.declaredHours) : '' }));
   const field = (name) => (event) => setForm((current) => ({ ...current, [name]: event.target.value }));
+  function submit(event) {
+    event.preventDefault();
+    onSave({ ...form, declaredHours: form.declaredHours === '' ? null : Number(form.declaredHours) });
+  }
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="edit-title">
-      <form onSubmit={(event) => { event.preventDefault(); onSave(form); }} className="max-h-[95dvh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border bg-white p-5 shadow-2xl dark:bg-zinc-950 sm:rounded-2xl sm:p-7">
+      <form onSubmit={submit} className="max-h-[95dvh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border bg-white p-5 shadow-2xl dark:bg-zinc-950 sm:rounded-2xl sm:p-7">
         <div className="flex items-start justify-between gap-4"><div><p className="text-sm font-bold text-brand-700 dark:text-brand-300">CORRECCIÓN EN SHEETS</p><h2 id="edit-title" className="mt-2 text-2xl font-bold">Editar trabajo</h2><p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Se actualizará la fila existente, sin crear duplicados.</p></div><button type="button" onClick={onClose} className="flex size-12 shrink-0 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-100 focus:outline-none focus:ring-4 focus:ring-brand-400/25 dark:hover:bg-zinc-900" aria-label="Cerrar edición"><X size={23} /></button></div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <label><span className="label">Fecha *</span><input type="date" className="field" value={form.date} onChange={field('date')} required /></label>
@@ -18,6 +22,7 @@ export function EditRecordPanel({ record, businesses, onSave, onClose, saving })
           <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border bg-white px-4 py-3 transition hover:border-brand-400 dark:bg-zinc-950 sm:col-span-2"><input type="checkbox" className="size-5 accent-brand-400" checked={Boolean(form.overtime)} onChange={(event) => setForm((current) => ({ ...current, overtime: event.target.checked }))} /><span className="text-sm">¿Han sido en horas extra?</span></label>
           <label><span className="label">Entrada del día *</span><input type="time" step="1" className="field" value={form.dayStart} onChange={field('dayStart')} required /></label>
           <label><span className="label">Salida del día *</span><input type="time" step="1" className="field" value={form.dayEnd} onChange={field('dayEnd')} required /></label>
+          <label className="sm:col-span-2"><span className="label">Horas trabajadas (declaradas)</span><input type="number" step="0.01" min="0" max="24" className="field tabular-nums" value={form.declaredHours} onChange={field('declaredHours')} placeholder="Ej. 8" /><span className="mt-1.5 block text-xs text-zinc-500 dark:text-zinc-400">Total oficial del parte; puede no coincidir con la suma de tareas.</span></label>
           <label><span className="label">Firma empleado *</span><input className="field" value={form.employeeSignature} onChange={field('employeeSignature')} required /></label>
           <label className="sm:col-span-2"><span className="label">Motivo de la corrección *</span><textarea className="field min-h-24" value={form.correctionReason} onChange={field('correctionReason')} minLength={5} maxLength={1000} required placeholder="Explica por qué deben cambiarse estas horas" /></label>
         </div>

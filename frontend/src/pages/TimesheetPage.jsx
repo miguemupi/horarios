@@ -29,7 +29,7 @@ export function TimesheetPage() {
   const { user } = useAuth();
   const [meta, setMeta] = useState(null);
   const [persisted, setPersisted] = useState([]);
-  const [form, setForm] = useState(() => ({ started: false, date: currentDate(), dayStart: currentTime(), dayEnd: currentTime(), employeeSignature: user.name, signatureConfirmed: false, entries: [], activeTask: null, reviewing: false, dayClosing: false }));
+  const [form, setForm] = useState(() => ({ started: false, date: currentDate(), dayStart: currentTime(), dayEnd: currentTime(), employeeSignature: user.name, signatureConfirmed: false, entries: [], activeTask: null, reviewing: false, dayClosing: false, declaredHours: '' }));
   const [status, setStatus] = useState('loading');
   const [toast, setToast] = useState(null);
   const [finishing, setFinishing] = useState(null);
@@ -48,6 +48,7 @@ export function TimesheetPage() {
       activeTask: hasNewShape && draft.activeTask ? { ...draft.activeTask, startTime: formatTime(draft.activeTask.startTime) } : null,
       reviewing: hasNewShape ? Boolean(draft.reviewing && draft.dayClosing) : false,
       dayClosing: Boolean(draft.dayClosing),
+      declaredHours: draft.declaredHours ?? '',
     };
   }
 
@@ -64,6 +65,7 @@ export function TimesheetPage() {
           entries: day.tasks || [], activeTask: day.activeTask ? { startTime: formatTime(day.activeTask.startTime) } : null,
           employeeSignature: day.employeeSignature || user.name,
           reviewing: false, dayClosing: false,
+          declaredHours: day.declaredHours !== null && day.declaredHours !== undefined ? String(day.declaredHours) : '',
         }));
         setStatus('ready');
         return;
@@ -104,7 +106,7 @@ export function TimesheetPage() {
     localStorage.removeItem(draftKey);
     removeDraftOffline(draftKey).catch(() => {});
     setPersisted([]);
-    setForm({ started: false, date: currentDate(), dayStart: currentTime(), dayEnd: currentTime(), employeeSignature: user.name, signatureConfirmed: false, entries: [], activeTask: null, reviewing: false, dayClosing: false });
+    setForm({ started: false, date: currentDate(), dayStart: currentTime(), dayEnd: currentTime(), employeeSignature: user.name, signatureConfirmed: false, entries: [], activeTask: null, reviewing: false, dayClosing: false, declaredHours: '' });
     setStatus('ready');
     setToast({ type: 'error', title: 'La jornada se cerró sola a las 22:00', message: 'Puedes iniciar una jornada nueva. Si falta alguna tarea de la jornada cerrada, pídele a un administrador que la añada desde el historial.' });
   }
@@ -202,6 +204,7 @@ export function TimesheetPage() {
       dayEnd: isFutureDateTime(current.date, current.dayEnd) ? current.dayEnd : currentTime(),
       reviewing: true,
       dayClosing: true,
+      declaredHours: current.declaredHours !== '' ? current.declaredHours : (Math.round((persistedMinutes + draftMinutes) / 60 * 100) / 100).toString(),
     }));
   }
 
@@ -215,7 +218,7 @@ export function TimesheetPage() {
       if (saved) setForm(hydrateDraft(JSON.parse(saved), true));
       else {
         const start = formatTime(rows.at(-1)?.endTime) || currentTime();
-        setForm({ started: rows.length > 0, date: nextDate, dayStart: formatTime(rows[0]?.dayStart) || start, dayEnd: formatTime(rows[0]?.dayEnd) || currentTime(), employeeSignature: user.name, signatureConfirmed: false, entries: [], activeTask: null, reviewing: false, dayClosing: false });
+        setForm({ started: rows.length > 0, date: nextDate, dayStart: formatTime(rows[0]?.dayStart) || start, dayEnd: formatTime(rows[0]?.dayEnd) || currentTime(), employeeSignature: user.name, signatureConfirmed: false, entries: [], activeTask: null, reviewing: false, dayClosing: false, declaredHours: rows[0]?.declaredHours != null ? String(rows[0].declaredHours) : '' });
       }
     } catch (error) {
       setToast({ type: 'error', title: 'No se pudo cambiar la fecha', message: error.message });
@@ -239,6 +242,7 @@ export function TimesheetPage() {
     }
     setStatus('saving');
     localStorage.setItem(draftKey, JSON.stringify(form));
+    const declaredHoursValue = form.declaredHours === '' || form.declaredHours == null ? null : Number(form.declaredHours);
     try {
       let result;
       if (form.workDayId) {
@@ -251,11 +255,11 @@ export function TimesheetPage() {
         }
         const response = await api(`/api/work-days/${form.workDayId}/finish`, { method: 'POST', body: {
           ...commandIdentity(), dayStart: form.dayStart, dayEnd: form.dayEnd,
-          employeeSignature: form.employeeSignature,
+          employeeSignature: form.employeeSignature, declaredHours: declaredHoursValue,
         } });
         result = { recordIds: response.workDay.tasks.map((entry) => entry.recordId), syncStatus: 'pending', storage: 'postgres' };
       } else {
-        result = await api('/api/timesheets', { method: 'POST', body: { ...form, signatureConfirmed: undefined } });
+        result = await api('/api/timesheets', { method: 'POST', body: { ...form, signatureConfirmed: undefined, declaredHours: declaredHoursValue } });
       }
       localStorage.removeItem(draftKey);
       removeDraftOffline(draftKey).catch(() => {});
@@ -374,6 +378,7 @@ export function TimesheetPage() {
             <label><span className="label">Fecha *</span><input type="date" className="field" value={form.date} onChange={(event) => changeDate(event.target.value)} disabled={Boolean(form.workDayId)} required /></label>
             <label><span className="label">Hora de entrada *</span><input type="time" step="1" className="field tabular-nums" value={form.dayStart} onChange={(event) => setForm({ ...form, dayStart: event.target.value })} required /></label>
             <label><span className="label">Hora de salida *</span><input type="time" step="1" className="field tabular-nums" value={form.dayEnd} onChange={(event) => setForm({ ...form, dayEnd: event.target.value })} required /></label>
+            <label><span className="label">Horas trabajadas (declaradas)</span><input type="number" step="0.01" min="0" max="24" className="field tabular-nums" value={form.declaredHours} onChange={(event) => setForm({ ...form, declaredHours: event.target.value })} placeholder="Ej. 8" /><span className="mt-1.5 block text-xs text-zinc-500 dark:text-zinc-400">Se guarda como el total oficial del parte, aunque no coincida con la suma de tareas.</span></label>
           </div>
         </section>
 

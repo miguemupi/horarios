@@ -33,6 +33,7 @@ const submission = z.object({
   dayEnd: time,
   employeeSignature: z.string().trim().min(2).max(200),
   entries: z.array(entry).min(1).max(50),
+  declaredHours: z.number().min(0).max(24).nullable().optional(),
 });
 const editable = z.object({
   date: date.optional(), business: z.string().min(1).max(120).optional(),
@@ -41,6 +42,7 @@ const editable = z.object({
   employeeSignature: z.string().trim().min(2).max(200).optional(),
   correctionReason: z.string().trim().min(5).max(1000).optional(),
   overtime: z.boolean().optional(),
+  declaredHours: z.number().min(0).max(24).nullable().optional(),
 });
 
 async function assertBusinesses(entries) {

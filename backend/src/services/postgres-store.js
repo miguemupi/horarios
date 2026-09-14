@@ -169,6 +169,7 @@ function mapRecord(row) {
     overtime: Boolean(row.is_overtime),
     dayStart: row.day_start,
     dayEnd: row.day_end,
+    declaredHours: row.declared_hours === null || row.declared_hours === undefined ? null : Number(row.declared_hours),
     workDayId: row.work_day_id,
     recordId: row.id,
     sourceRecordId: row.sheet_record_id || row.created_at?.toISOString?.() || String(row.created_at),
@@ -183,7 +184,7 @@ function mapRecord(row) {
 
 const RECORD_SELECT = `
   SELECT t.*, d.user_id AS work_day_user_id, d.work_date::text, d.status AS work_day_status, to_char(d.day_start, 'HH24:MI:SS') AS day_start,
-    to_char(d.day_end, 'HH24:MI:SS') AS day_end, d.manager_signature, d.employee_signature,
+    to_char(d.day_end, 'HH24:MI:SS') AS day_end, d.manager_signature, d.employee_signature, d.declared_hours,
     u.display_name AS employee_name, u.username AS employee_username, u.role AS employee_role,
     to_char(t.start_time, 'HH24:MI:SS') AS start_time,
     to_char(t.end_time, 'HH24:MI:SS') AS end_time
@@ -211,14 +212,14 @@ export async function saveTimesheet(payload, sessionUser, timezone) {
   if (!user) throw new AppError(403, 'Usuario no encontrado en PostgreSQL.', 'USER_NOT_FOUND');
   const result = await transaction(async (client) => {
     const dayResult = await client.query(
-      `INSERT INTO work_days (user_id, work_date, timezone, day_start, day_end, status, employee_signature, manager_signature, submitted_at)
-       VALUES ($1, $2, $3, $4, $5, 'submitted', $6, $7, now())
+      `INSERT INTO work_days (user_id, work_date, timezone, day_start, day_end, status, employee_signature, manager_signature, submitted_at, declared_hours)
+       VALUES ($1, $2, $3, $4, $5, 'submitted', $6, $7, now(), $8)
        ON CONFLICT (user_id, work_date) DO UPDATE SET
          timezone = EXCLUDED.timezone, day_start = LEAST(work_days.day_start, EXCLUDED.day_start),
          day_end = EXCLUDED.day_end, status = 'corrected', employee_signature = EXCLUDED.employee_signature,
-         manager_signature = EXCLUDED.manager_signature, submitted_at = now()
+         manager_signature = EXCLUDED.manager_signature, submitted_at = now(), declared_hours = EXCLUDED.declared_hours
        RETURNING id`,
-      [user.id, payload.date, timezone, payload.dayStart, payload.dayEnd, payload.employeeSignature, ''],
+      [user.id, payload.date, timezone, payload.dayStart, payload.dayEnd, payload.employeeSignature, '', payload.declaredHours ?? null],
     );
     const dayId = dayResult.rows[0].id;
     const positionResult = await client.query('SELECT COALESCE(max(position), 0) AS position FROM work_tasks WHERE work_day_id = $1', [dayId]);
@@ -283,13 +284,15 @@ export async function updateRecord(recordId, changes, sessionUser) {
         [current.work_day_id],
       );
     }
-    if (changes.date || changes.dayStart || changes.dayEnd || changes.managerSignature !== undefined || changes.employeeSignature) {
+    if (changes.date || changes.dayStart || changes.dayEnd || changes.managerSignature !== undefined
+      || changes.employeeSignature || changes.declaredHours !== undefined) {
       await client.query(
         `UPDATE work_days SET work_date = COALESCE($2::date, work_date), day_start = COALESCE($3::time, day_start),
          day_end = COALESCE($4::time, day_end), manager_signature = COALESCE($5, manager_signature),
-         employee_signature = COALESCE($6, employee_signature), status = 'corrected' WHERE id = $1`,
+         employee_signature = COALESCE($6, employee_signature), declared_hours = COALESCE($7, declared_hours),
+         status = 'corrected' WHERE id = $1`,
         [current.work_day_id, changes.date || null, changes.dayStart || null, changes.dayEnd || null,
-          changes.managerSignature ?? null, changes.employeeSignature || null],
+          changes.managerSignature ?? null, changes.employeeSignature || null, changes.declaredHours ?? null],
       );
     }
     if (current.work_day_status !== 'open') {

@@ -33,7 +33,7 @@ async function snapshot(client, dayId) {
       to_char(d.day_start, 'HH24:MI:SS') AS day_start,
       to_char(d.day_end, 'HH24:MI:SS') AS day_end,
       to_char(d.active_task_start, 'HH24:MI:SS') AS active_task_start,
-      d.active_task_planned, d.employee_signature, d.manager_signature, d.last_activity_at
+      d.active_task_planned, d.employee_signature, d.manager_signature, d.last_activity_at, d.declared_hours
      FROM work_days d WHERE d.id = $1`, [dayId],
   );
   if (!dayResult.rowCount) return null;
@@ -56,6 +56,7 @@ async function snapshot(client, dayId) {
     employeeSignature: day.employee_signature || '',
     managerSignature: day.manager_signature || '',
     lastActivityAt: day.last_activity_at,
+    declaredHours: day.declared_hours === null ? null : Number(day.declared_hours),
     tasks: tasks.rows.map(mapTask),
   };
 }
@@ -273,9 +274,10 @@ export async function finishWorkDay(sessionUser, dayId, input) {
     minutesBetween(input.dayStart || day.day_start, input.dayEnd);
     await client.query(
       `UPDATE work_days SET day_start = $2, day_end = $3, status = 'submitted', employee_signature = $4,
-        manager_signature = NULL, submitted_at = now(), revision = revision + 1, last_activity_at = now()
+        manager_signature = NULL, submitted_at = now(), revision = revision + 1, last_activity_at = now(),
+        declared_hours = $5
        WHERE id = $1`,
-      [dayId, input.dayStart || day.day_start, input.dayEnd, input.employeeSignature],
+      [dayId, input.dayStart || day.day_start, input.dayEnd, input.employeeSignature, input.declaredHours ?? null],
     );
     await addEvent(client, { dayId, userId: user.id, eventType: 'day.finished', idempotencyKey: input.idempotencyKey,
       deviceId: input.deviceId, date: day.work_date, time: input.dayEnd, payload: { taskCount } });

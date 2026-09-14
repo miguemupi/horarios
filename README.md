@@ -75,6 +75,7 @@ La comprobación se ejecuta al abrir la app (`GET/POST /api/work-days/...`) y, p
 - **Jornada transcurrida:** tiempo real desde la entrada hasta el momento actual.
 - **Horas en tareas:** suma de las tareas terminadas y, cuando corresponda, la tarea activa.
 - **Jornada total:** diferencia entre entrada y salida durante la revisión final.
+- **Horas trabajadas (declaradas):** número que el propio trabajador escribe al cerrar el día (`work_days.declared_hours`), pensado como el total "oficial" de su parte. Es independiente de la suma de tareas y puede no coincidir con ella; el trabajador o un administrador pueden corregirlo después desde Historial. Google Sheets, el CSV de administración y las estadísticas siguen calculando sus totales sumando las tareas, nunca este campo.
 
 ### Campo Material
 

@@ -54,6 +54,7 @@ workDaysRouter.post('/:id/finish', asyncRoute(async (req, res) => {
     dayStart: time,
     dayEnd: time,
     employeeSignature: z.string().trim().min(2).max(200),
+    declaredHours: z.number().min(0).max(24).nullable().optional(),
   }).parse(req.body);
   res.json({ workDay: await finishWorkDay(req.session.user, z.string().uuid().parse(req.params.id), input) });
 }));
