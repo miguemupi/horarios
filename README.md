@@ -79,7 +79,7 @@ La comprobación se ejecuta al abrir la app (`GET/POST /api/work-days/...`) y, p
 
 ### Campo Material
 
-El campo Material se retiró de la interfaz. El backend mantiene compatibilidad con la estructura extendida de Sheets, donde la columna existe pero normalmente queda vacía.
+El campo Material se retiró de la interfaz. La hoja de Sheets por defecto (`compact-overtime`, ver más abajo) ya no incluye esa columna; el backend mantiene compatibilidad con las estructuras extendidas anteriores, donde la columna existe pero normalmente queda vacía.
 
 ## Roles y permisos
 
@@ -330,13 +330,16 @@ Pestañas predeterminadas:
 - `Resumen diario`
 - `Resumen por negocio`
 
-El backend detecta tres disposiciones compatibles:
+El backend detecta cuatro disposiciones compatibles, por si acaso una Sheet antigua sigue con alguna de las anteriores:
 
-- **Compacta `A:K`:** sin Material ni identificador técnico de usuario.
-- **Extendida `A:O`:** conserva Material, firmas y usuario estable.
-- **Extendida con horas extra `A:P`:** recomendada; igual que la anterior más la columna de horas extra. Es la disposición con la que nace una Sheet nueva al pulsar "Crear o verificar pestañas". Una Sheet existente en `A:O` sigue funcionando igual: para incorporar la columna, añade manualmente la cabecera `Horas extra` en P1 y vuelve a pulsar "Crear o verificar pestañas".
+- **Compacta `A:K`:** sin Material, firmas, usuario ni horas extra.
+- **Compacta con horas extra `A:L`:** recomendada; es la disposición con la que nace una Sheet nueva al pulsar "Crear o verificar pestañas".
+- **Extendida `A:O`:** conserva Material, firmas y usuario estable (heredada).
+- **Extendida con horas extra `A:P`:** igual que la anterior más la columna de horas extra (heredada).
 
-La disposición extendida con horas extra es:
+Una Sheet existente en cualquiera de las disposiciones heredadas sigue funcionando igual; el backend detecta su cabecera automáticamente y no hace falta migrarla. Para pasar una Sheet ya creada a la disposición compacta con horas extra hay que editar la cabecera a mano (borrar las columnas Material, Firma encargado, Firma empleado y Usuario empleado) y volver a pulsar "Crear o verificar pestañas".
+
+La disposición compacta con horas extra es:
 
 | Columna | Cabecera | Contenido |
 |---|---|---|
@@ -345,17 +348,13 @@ La disposición extendida con horas extra es:
 | C | Empleado | Nombre visible |
 | D | Negocio | Nombre conservado en el momento del parte |
 | E | Trabajo realizado | Descripción de la tarea |
-| F | Material | Reservado; actualmente vacío |
-| G | Hora inicio | `HH:mm:ss` |
-| H | Hora fin | `HH:mm:ss` |
-| I | Total horas | Número decimal |
-| J | Hora entrada día | `HH:mm:ss` |
-| K | Hora salida día | `HH:mm:ss` |
-| L | Timestamp de registro | Identificador estable de sincronización |
-| M | Firma encargado | Texto opcional |
-| N | Firma empleado | Nombre confirmado |
-| O | Usuario empleado | Identificador usado para permisos |
-| P | Horas extra | `Sí` / `No` |
+| F | Hora inicio | `HH:mm:ss` |
+| G | Hora fin | `HH:mm:ss` |
+| H | Total horas | Número decimal |
+| I | Hora entrada día | `HH:mm:ss` |
+| J | Hora salida día | `HH:mm:ss` |
+| K | Timestamp de registro | Identificador estable de sincronización |
+| L | Horas extra | `Sí` / `No` |
 
 Hay una muestra importable en [docs/estructura-sheet.csv](docs/estructura-sheet.csv). Los resúmenes usan fórmulas `QUERY` nativas y se recalculan si alguien modifica el detalle directamente.
 
@@ -555,7 +554,7 @@ Pruebas manuales recomendadas:
 12. Una tarea futura permanece a cero hasta su hora real de inicio.
 13. Terminar el día nunca cierra automáticamente una tarea activa.
 14. Eliminar una persona o negocio no debe borrar su histórico.
-15. Los esquemas de Sheet compacto `A:K`, extendido `A:O` y extendido con horas extra `A:P` deben seguir detectándose por cabecera.
+15. Los esquemas de Sheet compacto `A:K`, compacto con horas extra `A:L`, extendido `A:O` y extendido con horas extra `A:P` deben seguir detectándose por cabecera.
 16. La jornada se cierra sola de un día anterior, o de hoy a partir de las 22:00, pero nunca inventa negocio ni descripción de una tarea abandonada: solo fija la hora de salida y deja una incidencia para revisión humana.
 
 ## Limitaciones conocidas

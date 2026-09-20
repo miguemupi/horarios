@@ -18,6 +18,7 @@ const COMPACT_HEADERS = [
   'Fecha', 'Día semana', 'Empleado', 'Negocio', 'Trabajo realizado', 'Hora inicio',
   'Hora fin', 'Total horas', 'Hora entrada día', 'Hora salida día', 'Timestamp de registro',
 ];
+const COMPACT_HEADERS_OVERTIME = [...COMPACT_HEADERS, OVERTIME_HEADER];
 
 const EXTENDED_LAYOUT = {
   type: 'extended', headers: DETAIL_HEADERS, endColumn: 'O',
@@ -37,6 +38,14 @@ const COMPACT_LAYOUT = {
   material: null, startTime: 5, endTime: 6, totalHours: 7, dayStart: 8, dayEnd: 9,
   recordId: 10, managerSignature: null, employeeSignature: null, employeeUsername: null, overtime: null,
 };
+// Layout por defecto para hojas nuevas: sin Material, Firma encargado, Firma empleado ni Usuario
+// empleado (no se piden en el flujo actual). Capa aparte, como con EXTENDED_OVERTIME_LAYOUT, para
+// no romper la detección de hojas ya existentes con alguno de los layouts anteriores.
+const COMPACT_OVERTIME_LAYOUT = {
+  type: 'compact-overtime', headers: COMPACT_HEADERS_OVERTIME, endColumn: 'L',
+  material: null, startTime: 5, endTime: 6, totalHours: 7, dayStart: 8, dayEnd: 9,
+  recordId: 10, managerSignature: null, employeeSignature: null, employeeUsername: null, overtime: 11,
+};
 
 let api;
 let writeLock = Promise.resolve();
@@ -50,7 +59,9 @@ function matchesHeaders(actual, expected) {
 }
 
 function detectLayout(headers, allowEmpty = false) {
-  if (!headers.length && allowEmpty) return EXTENDED_OVERTIME_LAYOUT;
+  if (!headers.length && allowEmpty) return COMPACT_OVERTIME_LAYOUT;
+  if (headers.length >= COMPACT_HEADERS_OVERTIME.length
+    && matchesHeaders(headers, COMPACT_HEADERS_OVERTIME)) return COMPACT_OVERTIME_LAYOUT;
   if (matchesHeaders(headers, COMPACT_HEADERS)) return COMPACT_LAYOUT;
   if (headers.length >= DETAIL_HEADERS_OVERTIME.length
     && DETAIL_HEADERS_OVERTIME.every((header, index) => String(headers[index] || '').trim() === header
@@ -128,7 +139,7 @@ export async function initializeSpreadsheet() {
     range: sheetRange(settings.sheets.detail, 'A1:P1'),
   }));
   const layout = detectLayout(headerResponse.data.values?.[0] || [], true);
-  const totalColumn = layout.type === 'compact' ? 'H' : 'I';
+  const totalColumn = layout.type === 'compact' || layout.type === 'compact-overtime' ? 'H' : 'I';
   const dailyFormula = `=QUERY('${settings.sheets.detail}'!A:${layout.endColumn},"select A,C,sum(${totalColumn}) where A is not null group by A,C label sum(${totalColumn}) 'Total horas'",1)`;
   const businessFormula = `=QUERY('${settings.sheets.detail}'!A:${layout.endColumn},"select A,D,sum(${totalColumn}) where A is not null group by A,D label sum(${totalColumn}) 'Total horas'",1)`;
   await withRetry(() => sheets.spreadsheets.values.batchUpdate({
@@ -179,7 +190,7 @@ function rowToRecord(row, rowNumber, layout, usernamesByName = new Map()) {
     startTime: normalizeTime(row[layout.startTime]), endTime: normalizeTime(row[layout.endTime]),
     totalHours: normalizeHours(row[layout.totalHours]), dayStart: normalizeTime(row[layout.dayStart]), dayEnd: normalizeTime(row[layout.dayEnd]),
     overtime: layout.overtime === null ? false : row[layout.overtime] === 'Sí',
-    recordId: layout.type === 'compact' ? `${sourceRecordId || 'sin-id'}::row:${rowNumber}` : sourceRecordId,
+    recordId: layout.type === 'compact' || layout.type === 'compact-overtime' ? `${sourceRecordId || 'sin-id'}::row:${rowNumber}` : sourceRecordId,
     sourceRecordId,
     managerSignature: layout.managerSignature === null ? '' : row[layout.managerSignature] || '',
     employeeSignature: layout.employeeSignature === null ? row[2] || '' : row[layout.employeeSignature] || '',
@@ -238,11 +249,14 @@ function recordRow(payload, work, user, timestamp, layout) {
     employeeUsername: user.username || user.email,
     overtime: work.overtime ? 'Sí' : 'No',
   };
-  if (layout.type === 'compact') return [
-    common.date, common.weekday, common.employeeName, common.business, common.work,
-    common.startTime, common.endTime, common.totalHours, common.dayStart, common.dayEnd,
-    common.timestamp,
-  ];
+  if (layout.type === 'compact' || layout.type === 'compact-overtime') {
+    const row = [
+      common.date, common.weekday, common.employeeName, common.business, common.work,
+      common.startTime, common.endTime, common.totalHours, common.dayStart, common.dayEnd,
+      common.timestamp,
+    ];
+    return layout.overtime === null ? row : [...row, common.overtime];
+  }
   const row = [
     common.date, common.weekday, common.employeeName, common.business, common.work, common.material,
     common.startTime, common.endTime, common.totalHours, common.dayStart, common.dayEnd,
@@ -253,11 +267,14 @@ function recordRow(payload, work, user, timestamp, layout) {
 
 function updatedRow(merged, layout, totalHours) {
   const timestamp = merged.sourceRecordId;
-  if (layout.type === 'compact') return [
-    merged.date, weekday(merged.date, getConfig().settings.timezone), merged.employeeName, merged.business,
-    merged.work.trim(), merged.startTime, merged.endTime, totalHours, merged.dayStart, merged.dayEnd,
-    timestamp,
-  ];
+  if (layout.type === 'compact' || layout.type === 'compact-overtime') {
+    const row = [
+      merged.date, weekday(merged.date, getConfig().settings.timezone), merged.employeeName, merged.business,
+      merged.work.trim(), merged.startTime, merged.endTime, totalHours, merged.dayStart, merged.dayEnd,
+      timestamp,
+    ];
+    return layout.overtime === null ? row : [...row, merged.overtime ? 'Sí' : 'No'];
+  }
   const row = [
     merged.date, weekday(merged.date, getConfig().settings.timezone), merged.employeeName, merged.business,
     merged.work.trim(), merged.material?.trim() || '', merged.startTime, merged.endTime, totalHours,

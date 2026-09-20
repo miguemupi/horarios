@@ -1,2 +1,2 @@
-Fecha,Día semana,Empleado,Negocio,Trabajo realizado,Material,Hora inicio,Hora fin,Total horas,Hora entrada día,Hora salida día,Timestamp de registro,Firma encargado,Firma empleado,Usuario empleado,Horas extra
-2026-08-05,miércoles,Empleado Ejemplo,Mariatrifulca,Revisión de iluminación,Bombilla LED,09:00:00,10:30:00,1.5,08:45:00,17:15:00,2026-08-05T08:31:12.000Z,Encargado Ejemplo,Empleado Ejemplo,empleado,No
+Fecha,Día semana,Empleado,Negocio,Trabajo realizado,Hora inicio,Hora fin,Total horas,Hora entrada día,Hora salida día,Timestamp de registro,Horas extra
+2026-08-05,miércoles,Empleado Ejemplo,Mariatrifulca,Revisión de iluminación,09:00:00,10:30:00,1.5,08:45:00,17:15:00,2026-08-05T08:31:12.000Z,No
