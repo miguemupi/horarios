@@ -1,4 +1,4 @@
-import { ArrowClockwise, CheckCircle, Clock, FlagCheckered, Hourglass, ListChecks, Play, Plus, StopCircle, WifiSlash } from '@phosphor-icons/react';
+import { ArrowClockwise, CheckCircle, Clock, FlagCheckered, Hourglass, ListChecks, NotePencil, Play, Plus, StopCircle, WifiSlash } from '@phosphor-icons/react';
 import { useEffect, useMemo, useState } from 'react';
 import { FinishTaskPanel } from '../components/FinishTaskPanel.jsx';
 import { LiveClock } from '../components/LiveClock.jsx';
@@ -6,7 +6,7 @@ import { Toast } from '../components/Toast.jsx';
 import { WorkEntry } from '../components/WorkEntry.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../lib/api.js';
-import { currentDate, currentTime, durationMinutes, elapsedMinutesSince, formatDuration, formatTime, isFutureDateTime } from '../lib/time.js';
+import { currentDate, currentTime, daysAgoDate, durationMinutes, elapsedMinutesSince, formatDuration, formatTime, isFutureDateTime } from '../lib/time.js';
 import { commandIdentity, workDayStorageKey } from '../lib/device.js';
 import { loadDraftOffline, queueCommand, removeDraftOffline, saveDraftOffline } from '../lib/offline-store.js';
 
@@ -209,6 +209,16 @@ export function TimesheetPage() {
   }
 
   async function changeDate(nextDate) {
+    if (form.manual) {
+      try {
+        const { rows } = await api(`/api/timesheets?dateFrom=${nextDate}&dateTo=${nextDate}`);
+        setPersisted(rows);
+        setForm((current) => ({ ...current, date: nextDate }));
+      } catch (error) {
+        setToast({ type: 'error', title: 'No se pudo cambiar la fecha', message: error.message });
+      }
+      return;
+    }
     localStorage.setItem(draftKey, JSON.stringify(form));
     const nextKey = `serendipia-draft:${user.email}:${nextDate}`;
     const saved = localStorage.getItem(nextKey);
@@ -222,6 +232,29 @@ export function TimesheetPage() {
       }
     } catch (error) {
       setToast({ type: 'error', title: 'No se pudo cambiar la fecha', message: error.message });
+    }
+  }
+
+  async function startManualEntry() {
+    const targetDate = daysAgoDate(1);
+    const key = `serendipia-draft:${user.email}:${targetDate}`;
+    const saved = localStorage.getItem(key);
+    try {
+      const { rows } = await api(`/api/timesheets?dateFrom=${targetDate}&dateTo=${targetDate}`);
+      setPersisted(rows);
+      if (saved) {
+        setForm({ ...hydrateDraft(JSON.parse(saved), true), manual: true, reviewing: true, dayClosing: true, activeTask: null });
+      } else {
+        setForm({
+          started: true, reviewing: true, dayClosing: true, manual: true, workDayId: null, presenceId: null,
+          date: targetDate, dayStart: formatTime(rows[0]?.dayStart) || '08:00', dayEnd: formatTime(rows[0]?.dayEnd) || '17:00',
+          entries: rows.length ? [] : [blankEntry('08:00')], activeTask: null,
+          employeeSignature: user.name, signatureConfirmed: false,
+          declaredHours: rows[0]?.declaredHours != null ? String(rows[0].declaredHours) : '',
+        });
+      }
+    } catch (error) {
+      setToast({ type: 'error', title: 'No se pudo preparar el parte manual', message: error.message });
     }
   }
 
@@ -266,7 +299,7 @@ export function TimesheetPage() {
       localStorage.removeItem(workDayStorageKey(user.email));
       const savedEntries = form.entries.map((entry, index) => ({ ...entry, totalHours: durationMinutes(entry.startTime, entry.endTime) / 60, dayStart: form.dayStart, dayEnd: form.dayEnd, employeeSignature: form.employeeSignature, recordId: result.recordIds[index], syncStatus: result.syncStatus }));
       setPersisted((rows) => [...rows, ...savedEntries]);
-      setForm((current) => ({ ...current, workDayId: null, presenceId: null, started: false, signatureConfirmed: false, entries: [], reviewing: false, dayClosing: false, activeTask: null }));
+      setForm((current) => ({ ...current, workDayId: null, presenceId: null, started: false, manual: false, signatureConfirmed: false, entries: [], reviewing: false, dayClosing: false, activeTask: null }));
       setStatus('ready');
       const usedFallback = result.storage === 'google-sheets-fallback';
       setToast(usedFallback
@@ -297,6 +330,7 @@ export function TimesheetPage() {
           Iniciar trabajo
         </button>
         <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">La hora se puede corregir antes de guardar el parte.</p>
+        <button type="button" onClick={startManualEntry} className="btn-secondary mt-6 w-full py-4 text-base"><NotePencil size={22} weight="bold" />¿Se te ha olvidado fichar? Añade tu parte manualmente</button>
       </section>
     </>
   );
@@ -361,6 +395,7 @@ export function TimesheetPage() {
     <>
       <Toast toast={toast} onClose={() => setToast(null)} />
       <form onSubmit={save} className="space-y-6">
+        {form.manual && <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"><strong>Parte manual.</strong> No hay ningún cronómetro en marcha: revisa bien la fecha y las horas de entrada, salida y de cada tarea antes de guardar.</div>}
         <section className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
           <div><p className="text-sm font-bold text-brand-700 dark:text-brand-300">RESUMEN DEL DÍA</p><h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Revisa y confirma los trabajos</h1><p className="mt-2 text-zinc-600 dark:text-zinc-300">El borrador se guarda automáticamente en este dispositivo.</p></div>
           <div className="grid grid-cols-2 overflow-hidden rounded-2xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
@@ -387,7 +422,7 @@ export function TimesheetPage() {
         <section className="panel p-5 sm:p-6">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div><h2 className="text-xl font-bold">Editar tareas</h2><p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Corrige o elimina antes de guardar.</p></div>
-            <div className="flex gap-3"><button type="button" onClick={resumeTimer} className="btn-secondary"><Hourglass size={20} weight="bold" />Otra tarea cronometrada</button><button type="button" onClick={addEntry} className="btn-secondary"><Plus size={20} weight="bold" />Añadir fila manual</button></div>
+            <div className="flex gap-3">{!form.manual && <button type="button" onClick={resumeTimer} className="btn-secondary"><Hourglass size={20} weight="bold" />Otra tarea cronometrada</button>}<button type="button" onClick={addEntry} className="btn-secondary"><Plus size={20} weight="bold" />Añadir fila manual</button></div>
           </div>
           {form.entries.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">Todavía no hay trabajos documentados.</p> : <div className="space-y-6">{form.entries.map((entry, index) => <WorkEntry key={index} entry={entry} index={index} businesses={meta.businesses} onChange={changeEntry} onRemove={removeEntry} canRemove={form.entries.length > 1} />)}</div>}
         </section>
