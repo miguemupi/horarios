@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAdmin, requireAuth, requireSupervisor } from '../middleware/auth.js';
 import { getConfig, publicSettings } from '../services/config-store.js';
-import { deleteRecord, listBusinesses, listRecords, listUsers, saveTimesheet, setManagerSignature, updateRecord } from '../services/postgres-store.js';
+import { deleteRecord, deleteWorkDay, listBusinesses, listRecords, listUsers, saveTimesheet, setManagerSignature, updateRecord } from '../services/postgres-store.js';
 import { appendTimesheet, listRecords as listSheetRecords, updateRecord as updateSheetRecord } from '../services/sheets.js';
 import { isDatabaseUnavailable } from '../services/database.js';
 import { localDate, minutesBetween } from '../utils/time.js';
@@ -149,5 +149,11 @@ timesheetsRouter.patch('/:recordId', asyncRoute(async (req, res) => {
 timesheetsRouter.delete('/:recordId', requireAdmin, asyncRoute(async (req, res) => {
   if (req.session.user.demo) throw new AppError(403, 'La demostración es de solo lectura.', 'DEMO_READ_ONLY');
   await deleteRecord(req.params.recordId, req.session.user);
+  res.status(204).end();
+}));
+
+timesheetsRouter.delete('/work-days/:workDayId', requireAdmin, asyncRoute(async (req, res) => {
+  if (req.session.user.demo) throw new AppError(403, 'La demostración es de solo lectura.', 'DEMO_READ_ONLY');
+  await deleteWorkDay(z.string().uuid().parse(req.params.workDayId), req.session.user);
   res.status(204).end();
 }));

@@ -18,6 +18,7 @@ export function HistoryPage() {
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [deletingDay, setDeletingDay] = useState(null);
   const [signing, setSigning] = useState(null);
   const [toast, setToast] = useState(null);
   const [expandedParts, setExpandedParts] = useState(() => new Set());
@@ -107,6 +108,20 @@ export function HistoryPage() {
     } finally { setDeleting(null); }
   }
 
+  async function deleteDay(part) {
+    const confirmed = window.confirm(`¿Eliminar TODO el parte de ${part.employeeName} del ${part.date} (${part.entries.length} ${part.entries.length === 1 ? 'tarea' : 'tareas'})?\n\nEsta acción no se puede deshacer.`);
+    if (!confirmed) return;
+    setDeletingDay(part.workDayId);
+    try {
+      await api(`/api/timesheets/work-days/${encodeURIComponent(part.workDayId)}`, { method: 'DELETE' });
+      setRows((current) => current.filter((item) => item.workDayId !== part.workDayId));
+      if (editing?.workDayId === part.workDayId) setEditing(null);
+      setToast({ type: 'success', title: 'Parte eliminado', message: `Se ha borrado el día completo de ${part.employeeName}.` });
+    } catch (error) {
+      setToast({ type: 'error', title: 'No se pudo borrar el parte', message: error.message });
+    } finally { setDeletingDay(null); }
+  }
+
   async function signPart(part, signed) {
     setSigning(part.workDayId);
     try {
@@ -153,6 +168,7 @@ export function HistoryPage() {
                   <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700 transition group-hover:bg-brand-100 dark:bg-zinc-800 dark:text-zinc-200 dark:group-hover:bg-brand-400/20"><CaretDown className={`transition-transform duration-200 motion-reduce:transition-none ${expanded ? 'rotate-180' : ''}`} size={21} weight="bold" /></span>
                 </div>
               </button>
+              {user.role === 'admin' && part.workDayId && <div className="flex justify-end border-t bg-zinc-50/70 px-4 py-3 dark:bg-black/20 sm:px-6"><button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 font-bold text-red-800 transition hover:bg-red-100 focus:outline-none focus:ring-4 focus:ring-red-400/25 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950" onClick={() => deleteDay(part)} disabled={deletingDay === part.workDayId}><Trash size={20} weight="bold" />{deletingDay === part.workDayId ? 'Borrando día…' : 'Eliminar día'}</button></div>}
               {canManagerSign && <div className="border-t bg-zinc-50/70 px-4 py-4 dark:bg-black/20 sm:px-6"><span className="label">Firma del encargado</span><label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border bg-white px-4 py-3 transition hover:border-brand-400 dark:bg-zinc-950"><input type="checkbox" className="size-5 accent-brand-400" checked={Boolean(part.managerSignature)} disabled={signing === part.workDayId} onChange={(event) => signPart(part, event.target.checked)} /><span className="text-sm">{signing === part.workDayId ? 'Guardando firma…' : part.managerSignature ? <><strong>{part.managerSignature}</strong> ha firmado este parte</> : <>Firmar el parte de <strong>{part.employeeName}</strong></>}</span>{part.managerSignature && <CheckCircle className="ml-auto shrink-0 text-brand-700 dark:text-brand-300" size={23} weight="fill" />}</label></div>}
               {expanded && <div id={detailId} className="border-t bg-zinc-50/70 p-4 dark:bg-black/20 sm:p-6">
                 <h3 className="sr-only">Tareas del {dateLabel}</h3>

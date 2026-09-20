@@ -382,6 +382,49 @@ export async function deleteRecord(recordId, sessionUser) {
   }, actor.id);
 }
 
+export async function deleteWorkDay(workDayId, sessionUser) {
+  const actor = await findLocalUser(sessionUser.username || sessionUser.email);
+  if (!actor) throw new AppError(403, 'Usuario no encontrado.', 'USER_NOT_FOUND');
+  if (actor.role !== 'admin') {
+    throw new AppError(403, 'Solo Administración puede borrar un parte completo.', 'FORBIDDEN');
+  }
+  return transaction(async (client) => {
+    const dayResult = await client.query(
+      `SELECT d.id, d.work_date::text, u.display_name AS employee_name
+       FROM work_days d JOIN app_users u ON u.id = d.user_id
+       WHERE d.id = $1 FOR UPDATE`,
+      [workDayId],
+    );
+    if (!dayResult.rowCount) throw new AppError(404, 'No se encuentra ese parte.', 'WORK_DAY_NOT_FOUND');
+    const day = dayResult.rows[0];
+
+    const tasksResult = await client.query(
+      `SELECT id, work_day_id, sheet_row_number, sheet_record_id FROM work_tasks WHERE work_day_id = $1 FOR UPDATE`,
+      [workDayId],
+    );
+    for (const task of tasksResult.rows) {
+      await client.query(
+        `INSERT INTO sheet_sync_outbox (aggregate_type, aggregate_id, event_type, payload, dedupe_key)
+         VALUES ('work_task', $1, 'work_task.delete_from_sheet', $2::jsonb, $3)
+         ON CONFLICT (dedupe_key) DO NOTHING`,
+        [task.id, JSON.stringify({
+          workDayId: task.work_day_id,
+          sheetRowNumber: task.sheet_row_number,
+          sheetRecordId: task.sheet_record_id,
+        }), `delete-work-task:${task.id}`],
+      );
+    }
+
+    await client.query('DELETE FROM work_days WHERE id = $1', [workDayId]);
+    return {
+      workDayId: day.id,
+      employeeName: day.employee_name,
+      date: day.work_date,
+      deletedTasks: tasksResult.rowCount,
+    };
+  }, actor.id);
+}
+
 export async function workDaySnapshot(dayId) {
   const result = await query(`${RECORD_SELECT} WHERE d.id = $1 ORDER BY t.position`, [dayId]);
   return result.rows;
